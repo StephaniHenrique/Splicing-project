@@ -1,3 +1,6 @@
+# checkpoint.h5
+checkpoint.weights.h5
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
