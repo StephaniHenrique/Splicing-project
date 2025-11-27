@@ -15,31 +15,31 @@ class categorical_crossentropy_2d:
         loss_map = -y_true * log_p
 
         if self.mask:
-            # Ponderação da Loss: W * y_true * (-log_p)
+            #Loss assessment: W * y_true * (-log_p)
             weighted_loss = (self.weights[0] * loss_map[:, 0, :] + 
                              self.weights[1] * loss_map[:, 1, :] + 
                              self.weights[2] * loss_map[:, 2, :])
             
-            # Ponderação do Peso (para normalização): W * y_true
+            #Weight assessment: W * y_true
             weighted_targets = (self.weights[0] * y_true[:, 0, :] + 
                                 self.weights[1] * y_true[:, 1, :] + 
                                 self.weights[2] * y_true[:, 2, :])
             
-            # 2. Soma e Normalização
+            #Sum and normalization
             loss_sum = torch.sum(weighted_loss)
             weight_sum = torch.sum(weighted_targets)
             
-            # Normaliza pela soma total dos pesos (incluindo epsilon para segurança)
+            #Normalizes by the total sum of the weights (including epsilon for safety)
             return loss_sum / (weight_sum + self.eps)
         else:
             loss_sum = torch.sum(loss_map, dim=(1, 2)) 
-            prob_sum = torch.sum(y_true, dim=(1, 2)) # Conta o número total de sítios verdadeiros
+            prob_sum = torch.sum(y_true, dim=(1, 2)) #Counts the total number of genuine websites
             
-            # Garante que não haja divisão por zero no caso de batches vazios
+            #Ensures that there is no division by zero in the case of empty batches.
             epsilon = torch.finfo(torch.float32).eps
             loss_per_batch = loss_sum / (prob_sum + epsilon)
             
-            # Retorna a média da perda por batch
+            #Returns the average loss per batch.
             return torch.mean(loss_per_batch)
         
 class binary_crossentropy_2d:

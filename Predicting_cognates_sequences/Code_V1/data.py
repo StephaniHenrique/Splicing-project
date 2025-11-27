@@ -37,17 +37,17 @@ def create_dataset_for_chromosome(donor_sites, acceptor_sites):
 
     min_len = min(len(donor_sites), len(acceptor_sites))
     
-    #Pares Corretos (Label 1)
+    #Cognates (Label 1)
     correct_pairs = []
     for i in range(min_len):
         donor_seq = donor_sites[i][1]
         acceptor_seq = acceptor_sites[i][1]
         
-        #Sequências válidas e de mesmo comprimento
+        #valid sequences with same length 
         if donor_seq and acceptor_seq and len(donor_seq) == len(acceptor_seq):
             correct_pairs.append((donor_seq, acceptor_seq, 1))
 
-    #Pares Incompatíveis (Label 0)
+    #Non-cognates(Label 0)
     num_pairs = len(correct_pairs) 
     if num_pairs == 0:
         return [], 0
@@ -59,7 +59,7 @@ def create_dataset_for_chromosome(donor_sites, acceptor_sites):
     
     shift = random.randint(1, num_pairs - 1)
     for i in range(num_pairs):
-        #Deslocamento circular
+        #circular shift
         j = (i + shift) % num_pairs
         
         d_seq = all_donors[i]
@@ -67,7 +67,7 @@ def create_dataset_for_chromosome(donor_sites, acceptor_sites):
         
         mismatched_pairs.append((d_seq, a_seq_mismatch, 0))
         
-    #Dataset final
+    #Final dataset 
     chromosome_dataset = correct_pairs + mismatched_pairs
     
     return chromosome_dataset, num_pairs
@@ -82,7 +82,7 @@ def aggregate_all_chromosomes(chromosomes_list):
         donor_file = f'../Data/chr{chr_num}_donor.fa'
         acceptor_file = f'../Data/chr{chr_num}_acceptor.fa'
         
-        # Leitura dos arquivos
+        #Reading files 
         donor_sites = parse_fasta_manual_ordered(donor_file)
         acceptor_sites = parse_fasta_manual_ordered(acceptor_file)
         
@@ -90,11 +90,11 @@ def aggregate_all_chromosomes(chromosomes_list):
             print(f"NAO TEM CROMOSSOMO")
             continue
             
-        # Criação do dataset (Corretos e Incompatíveis)
+        #Creating datases 
         chr_dataset, num_pairs = create_dataset_for_chromosome(donor_sites, acceptor_sites)
         
         print(f"  Label 1: {num_pairs}")
-        print(f"  Amostras - chr{chr_num}: {len(chr_dataset)}")
+        print(f"  Sample - chr{chr_num}: {len(chr_dataset)}")
         
         full_dataset.extend(chr_dataset)
         total_cognate_pairs += num_pairs

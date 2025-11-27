@@ -9,12 +9,10 @@ from tensorflow.keras.regularizers import l2
 import keras_tuner as kt
 
 
-# -------------------------
-# FOCAL LOSS (opcional)
-# -------------------------
+#-------FOCAL LOSS (opcional)------
 def focal_loss(gamma=2., alpha=.25):
     """
-    Implementa a Focal Loss para lidar com desequilíbrio de classes.
+    It implements Focal Loss to address class imbalance.
     """
     def loss(y_true, y_pred):
         # Evita log(0)
@@ -25,36 +23,31 @@ def focal_loss(gamma=2., alpha=.25):
     return loss
 
 
-# -------------------------
-# ATTENTION POOLING (CORRIGIDO: Agora como uma classe Layer)
-# -------------------------
+#--------ATTENTION POOLING----------
 class AttentionPoolingLayer(Layer):
     """
-    Camada customizada para realizar Attention Pooling de sequências.
-    Isto resolve o problema de KerasTensor com tf.reduce_sum e a criação
-    múltipla de variáveis no Keras Tuner.
+    Custom layer for performing Attention Pooling of sequences.
+    This solves the KerasTensor problem with tf.reduce_sum and the multiple creation of variables in Keras Tuner.
     """
     def __init__(self, **kwargs):
         super(AttentionPoolingLayer, self).__init__(**kwargs)
-        # As camadas com variáveis (Dense) são criadas uma única vez no __init__
+        #Layers with variables (Dense) are created only once in __init__
         self.score_dense = Dense(1, activation="tanh", name="att_score_dense")
         self.score_softmax = Activation("softmax", name="att_softmax")
 
     def call(self, x):
-        # 1. Calcula os scores de atenção
+        #It calculates attention scores
         score = self.score_dense(x) 
         score = self.score_softmax(score)
         
-        # 2. Aplica o peso (KerasTensor * KerasTensor é seguro)
+        #Apply weigh (KerasTensor * KerasTensor)
         weighted_x = score * x
         
-        # 3. Redução (tf.reduce_sum é seguro dentro do método call de uma Layer)
+        #Reduction 
         return tf.reduce_sum(weighted_x, axis=1)
 
 
-# -------------------------
-# MULTI-KERNEL BLOCK (multi-scale CNN)
-# -------------------------
+#-------MULTI-KERNEL BLOCK (multi-scale CNN)-------
 def multi_kernel_block(x, hp_filters):
     """Convoluções em paralelo com diferentes tamanhos de kernel para multi-escala."""
     b1 = Conv1D(hp_filters, 5, padding="same", activation="relu")(x)
@@ -63,9 +56,7 @@ def multi_kernel_block(x, hp_filters):
     return Concatenate()([b1, b2, b3])
 
 
-# -------------------------
-# RESIDUAL DILATED BLOCK
-# -------------------------
+#------RESIDUAL DILATED BLOCK------
 def residual_dilated_block(x, hp_filters, dilation_rate):
     """Bloco Residual com Convoluções Dilatadas."""
     input_tensor = x
@@ -89,12 +80,10 @@ def residual_dilated_block(x, hp_filters, dilation_rate):
     return y
 
 
-# -------------------------
-# MAIN MODEL WITH HP
-# -------------------------
+#------MAIN MODEL WITH HP-------
 def build_model(hp):
 
-    # Hyperparams a serem otimizados pelo Keras Tuner
+    #Hyperparams to optimize by Keras Tuner
     hp_filters = hp.Choice("filters", values=[32, 64, 128])
     hp_dense = hp.Choice("dense_units", values=[64, 128, 256, 512])
     hp_dropout = hp.Float("dropout_rate", 0.1, 0.6, step=0.1)
@@ -104,53 +93,43 @@ def build_model(hp):
     hp_batch_size = hp.Choice("batch_size", values=[16, 32, 64, 128])
 
     SEQ_LEN = 201
-    VOCAB = 5  # 4 bases + 1 para 'N'
+    VOCAB = 5  # 4 bases + 1 for 'N'
 
-    # -------------------------
-    # INPUTS & EMBEDDING
-    # -------------------------
+    #------INPUTS & EMBEDDING------
     donor_input = Input(shape=(SEQ_LEN,), name="donor_input")
     acceptor_input = Input(shape=(SEQ_LEN,), name="acceptor_input")
     
     donor = Embedding(VOCAB, hp_embed, name="donor_embed")(donor_input)
     acceptor = Embedding(VOCAB, hp_embed, name="acceptor_embed")(acceptor_input)
     
-    # Instancia a camada de Attention Pooling
+    #Instantiates the Attention Pooling layer.
     attention_layer = AttentionPoolingLayer()
 
-    # -------------------------
-    # DONOR BRANCH
-    # -------------------------
+    #-------DONOR BRANCH------
     xD = multi_kernel_block(donor, hp_filters)
     for rate in [1, 2, 4, 8]:
         xD = residual_dilated_block(xD, hp_filters, rate)
         
-    # USO DA CLASSE Layer: Chamada como uma camada Keras
+    #Using class layer
     donor_feat = attention_layer(xD)
 
-    # -------------------------
-    # ACCEPTOR BRANCH
-    # -------------------------
+    #------ACCEPTOR BRANCH------
     xA = multi_kernel_block(acceptor, hp_filters)
 
     for rate in [1, 2, 4, 8]:
         xA = residual_dilated_block(xA, hp_filters, dilation_rate=rate)
         
-    # USO DA CLASSE Layer: Chamada como uma camada Keras
+    #Using class layer
     acceptor_feat = attention_layer(xA)
 
-    # -------------------------
-    # FEATURE FUSION + GATING
-    # -------------------------
+    #----FEATURE FUSION + GATING----
     fused = Concatenate()([donor_feat, acceptor_feat])
 
-    # Gating
+    #Gating
     gate = Dense(fused.shape[-1], activation="sigmoid", name="fusion_gate")(fused)
     fused = fused * gate 
 
-    # -------------------------
-    # CLASSIFICATION HEAD
-    # -------------------------
+    #---CLASSIFICATION HEAD----
     y = Dense(hp_dense, activation="relu",
               kernel_regularizer=l2(hp_l2), name="dense_1")(fused)
     y = Dropout(hp_dropout)(y)
@@ -163,7 +142,7 @@ def build_model(hp):
 
     model = Model(inputs=[donor_input, acceptor_input], outputs=output)
 
-    # Compile
+    #Compile
     model.compile(
         optimizer=AdamW(learning_rate=hp_lr, weight_decay=hp_l2),
         loss=focal_loss(gamma=2., alpha=0.25), 

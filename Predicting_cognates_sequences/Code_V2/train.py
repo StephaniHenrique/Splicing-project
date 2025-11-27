@@ -37,4 +37,4 @@ history = model.fit(
 )
 
 model.save("final_splice_model.h5")
-print("Modelo final salvo")
+print("Final model saved")

@@ -10,7 +10,7 @@ from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.utils import class_weight
-# O Keras Tuner não é estritamente necessário para o modelo, mas sim para a otimização
+#Keras tuner to random search
 import keras_tuner as kt 
 
 N_BASES = 4 
@@ -19,7 +19,7 @@ SEQUENCE_LENGTH = 201
 
 def build_model(hp):
     
-    # Hyperparameters to convolutional layers 
+    #Hyperparameters to convolutional layers 
     hp_filters = hp.Int('filters', min_value=16, max_value=64, step=16)
     hp_kernel_size = hp.Int('kernel_size', min_value=5, max_value=15, step=5)
     hp_l2_reg = hp.Choice('l2_reg', values=[1e-4, 1e-3, 1e-2])
@@ -36,10 +36,10 @@ def build_model(hp):
     #--- AUX FUNCTIONS ---
 
     def create_res_block_hp(x, rate):
-        """Bloco Residual com Dilação e HPs dinâmicos."""
+        """Residual Block with Dilation and Dynamic Hyperparameters."""
         input_tensor = x
         
-        # First Conv1D
+        #First Conv1D
         y = Conv1D(
             filters=hp_filters, 
             kernel_size=hp_kernel_size, 
@@ -77,7 +77,7 @@ def build_model(hp):
             kernel_size=hp_kernel_size, 
             padding='same', 
             kernel_initializer='he_normal', 
-            kernel_regularizer=l2(hp_l2_reg) # Aplicando L2
+            kernel_regularizer=l2(hp_l2_reg) #Using L2
         )(x)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)

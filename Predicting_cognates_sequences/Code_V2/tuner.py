@@ -44,9 +44,9 @@ def run_tuner(X_donor_train, X_acceptor_train, y_train,
         verbose=1
     )
 
-    # Recupera melhor hiperparâmetro encontrado
+    #Getting better hyperparameters found
     best_hp = tuner.get_best_hyperparameters(1)[0]
-    print("Melhores hiperparâmetros:")
+    print("Best hyperparametes:")
     print(best_hp.values)
 
     return tuner, best_hp

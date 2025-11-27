@@ -38,10 +38,10 @@ from gpu_metrics import run_bootstrap
 from collections import OrderedDict
 
 #----------
-print("Comecando aqui")
+print("Starting here")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Dispositivo selecionado: {device}")
+print(f"Selected device: {device}")
 
 rng = np.random.default_rng(23673)
 
@@ -53,9 +53,9 @@ train_gene, validation_gene = train_test_split(annotation['gene'].drop_duplicate
 annotation_train = annotation[annotation['gene'].isin(train_gene)]
 annotation_validation = annotation[annotation['gene'].isin(validation_gene)]
 
-print(annotation_validation)
+#print(annotation_validation)
 
-print("Definindo os hiperparametros")
+print("Defining hyperparameters")
 
 L = 32
 N_GPUS = 1
@@ -86,10 +86,10 @@ CL_student = 2 * np.sum(ARlite*(Wlite-1))
 SL=5000
 T_CL_MAX=40000
 S_CL_MAX = 20000
-T = 5.0    # Temperatura
+T = 5.0    #Temperature
 ALPHA = 0.9
 
-print("trabalhando nos dados")
+print("Processing data")
 
 train_dataset = spliceDataset(getDataPointListFull(annotation_train,transcriptToLabel,SL,S_CL_MAX,shift=SL))
 val_dataset = spliceDataset(getDataPointListFull(annotation_validation,transcriptToLabel,SL,S_CL_MAX,shift=SL))
@@ -122,7 +122,7 @@ try:
     state_dict = torch.load(TEACHER_WEIGHTS_PATH, map_location=device)
     new_state_dict = OrderedDict()
     for k, v in state_dict.items():
-        name = k[7:] # remove `module.`
+        name = k[7:] #remove `module.`
         new_state_dict[name] = v
         
     teacher_model.load_state_dict(new_state_dict)
@@ -155,17 +155,16 @@ except Exception as e:
     print(f"ERROR: {e}")
     sys.exit()
 
-# SpliceDistillationLoss combina KL-Divergence (Soft) e Cross-Entropy (Hard)
+#SpliceDistillationLoss combine KL-Divergence (Soft) e Cross-Entropy (Hard)
 distillation_loss_fn = SpliceDistillationLoss(T=T, alpha=ALPHA)
 
-# Otimizador: Apenas o Student deve ser treinado.
+#Optimizer: ONly student should be trained.
 optimizer = torch.optim.AdamW(student_model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
-print(f"✅ Loss de Destilação configurada (T={T}, Alpha={ALPHA}).")
+print(f"Config: Distilation loss(T={T}, Alpha={ALPHA}).")
 
 
 EPOCHS = 10
-# Colocando o estudante em modo treinamento e o professor em modo avaliação (já foi feito, mas bom reforçar)
 print(student_model.train()) 
 print(teacher_model.eval())
 
@@ -174,7 +173,7 @@ best_val_loss = float('inf')
 best_student_weights = copy.deepcopy(student_model.state_dict())
 checkpoint_path='best_spliceformerlite_distillation.pt'
 
-print("\n--- INICIANDO VERIFICAÇÃO DE SHAPES (Epoch 1) ---")
+print("\n--- CHECKING SHAPES (Epoch 1) ---")
 
 for batch_idx, (input_data, hard_targets) in enumerate(train_loader):
     if batch_idx >=5:
@@ -188,11 +187,8 @@ for batch_idx, (input_data, hard_targets) in enumerate(train_loader):
     teacher_output = teacher_model(input_data, distillation_mode=True)
     teacher_logits = teacher_output[0]
 
-    # 2. **CRÍTICO:** Desanexe os logits do professor do gráfico de computação.
-    # Isso garante que ele não tenha um grad_fn e é tratado como constante.
     teacher_logits = teacher_logits.detach() 
 
-    # 3. Obtenha a saída do aluno (DEVE rastrear o gradiente)
     student_output = student_model(input_data)
     student_logits = student_output[0]
 
@@ -218,11 +214,11 @@ for batch_idx, (input_data, hard_targets) in enumerate(train_loader):
 
     except RuntimeError as e:
         print(f"ERRO NO {batch_idx}")
-        print(f"Detalhe do erro: {e}")
+        print(f"Detail: {e}")
 
 for epoch in range(1, EPOCHS + 1):
     
-    # --- Treinamento ---
+    #--- Train ---
     student_model.train()
     total_train_loss = 0.0
     start_time = time.time()
@@ -235,35 +231,32 @@ for epoch in range(1, EPOCHS + 1):
 
         optimizer.zero_grad()
 
-        # 1. Saída do Professor (Soft Targets)
-        # Usamos with torch.no_grad() para eficiência e garantir que o gráfico de gradiente
-        # não seja construído para o Teacher (embora requires_grad=False já ajude).
+        #Professor output(Soft Targets)
+        #We use with torch.no_grad() for efficiency and to ensure the gradient graph...
         with torch.no_grad():
             teacher_output = teacher_model(input_data, distillation_mode=True)
             teacher_logits_full = teacher_output[0] # [B, C, L_FULL]
         
-        # 2. Saída do Aluno (DEVE rastrear gradientes)
+        #Student output
         student_output = student_model(input_data)
         student_logits = student_output[0] # [B, C, L_TARGET]
 
-        # 3. Alinhamento e Corte dos Logits do Professor e Hard Targets
+        #Alignment and Cutting of Professor Logits and Hard Targets
         L_TARGET = student_logits.shape[2] 
         L_FULL = teacher_logits_full.shape[2] 
         
-        # O corte é necessário para alinhar com a saída do Aluno
         start = int((L_FULL - L_TARGET) / 2)
         end = int(start + L_TARGET)
         
-        # Desanexamos novamente, apenas para ter certeza (teacher_logits_full já está sem grad_fn)
         teacher_logits_cropped = teacher_logits_full[:, :, start:end].detach() 
         hard_targets_cropped = hard_targets[:, :, start:end]
 
-        # 4. Cálculo da Perda de Destilação
+        #Calculation of Distillation Loss
         loss = distillation_loss_fn(student_logits, 
                                     teacher_logits_cropped, 
                                     hard_targets_cropped)
         
-        # 5. Retropropagação e Otimização
+        #Backpropagation and Optimization
         loss.backward()
         optimizer.step()
 
@@ -273,7 +266,7 @@ for epoch in range(1, EPOCHS + 1):
     avg_train_loss = total_train_loss / len(train_loader.dataset)
     history['train_loss'].append(avg_train_loss)
     
-    # --- Validação ---
+    # --- Validation ---
     student_model.eval()
     total_val_loss = 0.0
     val_logits_list = []
@@ -285,35 +278,35 @@ for epoch in range(1, EPOCHS + 1):
             input_data = input_data.to(device).float()
             hard_targets = hard_targets.to(device).float()
 
-            # Saída do Aluno
+            #Student output
             student_output = student_model(input_data)
             student_logits = student_output[0]
             
-            # Para o corte dos hard targets (usando a CL_max do Teacher para o cálculo do offset)
+            #For cutting off hard targets (using Teacher's CL_max for offset calculation)
             L_TARGET = student_logits.shape[2] 
             L_input = input_data.shape[2]
-            # O tamanho da saída do Teacher seria L_input - T_CL_MAX
+            
+            #The size of the Teacher's output would be L_input - T_CL_MAX.
             L_FULL_FAKE = L_input - T_CL_MAX
             
             start = int((L_FULL_FAKE - L_TARGET) / 2)
             end = int(start + L_TARGET)
             
-            # Corte dos Hard Targets
+            #Cutting Hard Targets
             hard_targets_cropped = hard_targets[:, :, start:end]
 
-            # Perda de Validação: Apenas a Hard Loss (Cross-Entropy)
-            # Usando .hard_loss_fn que foi definida dentro da SpliceDistillationLoss
+            #Validation Loss: Hard Loss (Cross-Entropy) Only
+            #Using .hard_loss_fn which was defined within SpliceDistillationLoss
             val_loss = distillation_loss_fn.hard_loss_fn(student_logits, hard_targets_cropped)
             total_val_loss += val_loss.item() * input_data.size(0)
 
-            # Coletar para métricas
+            #Collect for metrics
             val_logits_list.append(student_logits.cpu().numpy())
             val_targets_list.append(hard_targets_cropped.cpu().numpy())
 
     avg_val_loss = total_val_loss / len(val_loader.dataset)
     history['val_loss'].append(avg_val_loss)
 
-    # Cálculo das Métricas de Validação
     #print(f"\n--- Métricas de Validação (Epoch {epoch}) ---")
     # Chamando a função importada print_topl_statistics (val_metrics_fn)
     #val_metrics = print_topl_statistics(val_logits_list, val_targets_list) #Parou aqui
@@ -321,21 +314,21 @@ for epoch in range(1, EPOCHS + 1):
     
     print(f"\n--- Métricas de Validação (Epoch {epoch}) ---")
 
-    # 1. Concatenar todos os batches em arrays NumPy grandes: [N, C, L]
-    # O resultado será de shape [Total_Samples, 3, L_Target]
+    #Concatenate all batches into large NumPy arrays: [N, C, L]
+    #The result will be of the shape [Total_Samples, 3, L_Target]
     y_pred_concat = np.concatenate(val_logits_list, axis=0)
     y_true_concat = np.concatenate(val_targets_list, axis=0)
     
-    # 2. Avaliar Acceptor Sites (assumindo canal 1)
-    # Seleciona o canal 1 e achata (flatten) para 1D: [Total_Samples * L_Target]
+    #Evaluate Acceptor Sites (assuming channel 1)
+    #Select channel 1 and flatten it to 1D: [Total_Samples * L_Target]
     y_true_acceptor = y_true_concat[:, 1, :].flatten()
     y_pred_acceptor = y_pred_concat[:, 1, :].flatten()
 
     print("\n\033[1m{}:\033[0m".format('Acceptor'))
     acceptor_metrics = print_topl_statistics(y_true_acceptor, y_pred_acceptor)
 
-    # 3. Avaliar Donor Sites (assumindo canal 2)
-    # Seleciona o canal 2 e achata (flatten) para 1D: [Total_Samples * L_Target]
+    #Evaluate Donor Sites (assuming channel 2)
+    #Select channel 2 and flatten to 1D: [Total_Samples * L_Target]
     y_true_donor = y_true_concat[:, 2, :].flatten()
     y_pred_donor = y_pred_concat[:, 2, :].flatten()
 
@@ -344,7 +337,7 @@ for epoch in range(1, EPOCHS + 1):
     #print(y_pred_donor)
     donor_metrics = print_topl_statistics(y_true_donor, y_pred_donor)
 
-    # Armazenar ambas as métricas no histórico
+    #Store both metrics in the history.
     history['val_metrics'].append({'acceptor': acceptor_metrics, 'donor': donor_metrics})
     # --- FIM DA CORREÇÃO ---
     
@@ -353,14 +346,13 @@ for epoch in range(1, EPOCHS + 1):
         best_val_loss = avg_val_loss
         best_student_weights = copy.deepcopy(student_model.state_dict())
         torch.save(best_student_weights, checkpoint_path)
-        print(f"✅ Checkpoint salvo: Perda de validação melhorada para {best_val_loss:.4f}")
+        print(f"Checkpoint saved: Improved validation loss for {best_val_loss:.4f}")
     
     end_time = time.time()
-    print(f"\nEpoch {epoch} concluída. Tempo: {end_time - start_time:.2f}s")
-    print(f"Média da Perda de Treinamento: {avg_train_loss:.4f}")
-    print(f"Média da Perda de Validação: {avg_val_loss:.4f} (Melhor: {best_val_loss:.4f})")
+    print(f"\nEpoch {epoch}. Time: {end_time - start_time:.2f}s")
+    print(f"Average Training Loss: {avg_train_loss:.4f}")
+    print(f"Average Validation Loss: {avg_val_loss:.4f} (Melhor: {best_val_loss:.4f})")
     print("-------------------------------------------------\n")
 
-# Carregar os melhores pesos para o modelo final
+#Load the best weights for the final model
 student_model.load_state_dict(best_student_weights)
-print("Treinamento concluído. Melhores pesos carregados no modelo Aluno.")

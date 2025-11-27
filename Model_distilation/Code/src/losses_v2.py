@@ -17,35 +17,34 @@ class categorical_crossentropy_2d:
 
         if self.mask:
           
-            # Ponderação da Loss: W * y_true * (-log_p)
+            #Loss assessment: W * y_true * (-log_p)
             weighted_loss = (self.weights[0] * loss_map[:, 0, :] + 
                              self.weights[1] * loss_map[:, 1, :] + 
                              self.weights[2] * loss_map[:, 2, :])
   
            
-            # Ponderação do Peso (para normalização): W * y_true
+            #Weight assessment: W * y_true
             weighted_targets = (self.weights[0] * y_true[:, 0, :] + 
                                 self.weights[1] * y_true[:, 1, :] + 
             
                              self.weights[2] * y_true[:, 2, :])
             
-            # 2. Soma e Normalização
+            #Sum and normalization
             loss_sum = torch.sum(weighted_loss)
             weight_sum = torch.sum(weighted_targets)
             
         
-        # Normaliza pela soma total dos pesos (incluindo epsilon para segurança)
+            #Normalizes by the total sum of the weights (including epsilon for safety)
             return loss_sum / (weight_sum + epsilon) # Usando 'epsilon' em vez de 'self.eps'
         else:
             loss_sum = torch.sum(loss_map, dim=(1, 2)) 
             prob_sum = torch.sum(y_true, dim=(1, 2)) # Conta o número total de sítios verdadeiros
             
         
-        # Garante que não haja divisão por zero no caso de batches vazios
-            #epsilon = torch.finfo(torch.float32).eps # Já definido acima
+            #epsilon = torch.finfo(torch.float32).eps 
             loss_per_batch = loss_sum / (prob_sum + epsilon)
             
-            # Retorna a média da perda por batch
+            #Returns the average loss per batch.
             return torch.mean(loss_per_batch)
         
 
@@ -81,7 +80,7 @@ class kl_div_2d:
         return kl_loss
     
 class SpliceDistillationLoss(nn.Module):
-    # Combining hard target with soft target
+    #Combining hard target with soft target
     def __init__(self, T=5.0, alpha=0.9, class_weights=None, **kwargs): # ADICIONADO class_weights
    
         super(SpliceDistillationLoss, self).__init__()
@@ -89,15 +88,15 @@ class SpliceDistillationLoss(nn.Module):
         self.T = T
         self.alpha = alpha
         
-        # Passando weights e mask=True se weights for fornecido (para ponderação de classes)
+        #Passing weights and mask=True if weights is provided (for class weighting)
         mask = class_weights is not None
         self.hard_loss_fn = categorical_crossentropy_2d(weights=class_weights, mask=mask).loss 
         
-        # Soft loss, using KL divergence 
+        #Soft loss, using KL divergence 
         self.soft_loss_fn = kl_div_2d(temp=self.T).loss 
 
     def forward(self, student_logits, teacher_logits, hard_targets):
-        # The student and professor should return LOGITS
+        #The student and professor should return LOGITS
         
         loss_soft = self.soft_loss_fn(student_logits, teacher_logits)
         loss_hard = self.hard_loss_fn(student_logits, hard_targets) 
