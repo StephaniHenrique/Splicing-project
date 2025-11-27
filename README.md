@@ -40,12 +40,12 @@ pip install -r requirements.txt
    cd cognate_sequence_prediction/Code_V1
    ```
 
-2. **Run the data processing script first:**
+2. Run the data processing script first:
    ```bash
    python data.py
    ```
 
-3. **Then run the model script:**
+3. Then run the model script:
    ```bash
    python model.py
    ```
@@ -82,7 +82,7 @@ gunzip Homo_sapiens.GRCh38.87.gtf.gz
    cd model_distillation/Code
    ```
 
-2. **Construct the ENSEMBLE dataset:**
+2. Construct the ENSEMBLE dataset:
    ```bash
    construct_ENSMBL_datasets.ipynb
    ```
@@ -91,7 +91,7 @@ gunzip Homo_sapiens.GRCh38.87.gtf.gz
    cd src
    ```
    
-4. **Run the distillation script:**
+4. Run the distillation script:
    ```bash
    python model_distillation.py
    ```
